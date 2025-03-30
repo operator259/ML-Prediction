@@ -1,0 +1,13 @@
+pandas
+scikit-learn
+joblib
+skl2onnx
+requests
+numpy
+http.server
+socketserver
+json
+os
+shutil
+subprocess
+pathlib
