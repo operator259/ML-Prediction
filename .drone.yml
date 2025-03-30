@@ -1,0 +1,18 @@
+
+kind: pipeline
+name: default
+
+steps:
+  - name: docker
+    image: plugins/docker
+    settings:
+      username: 
+       from_secret: pubGithub_username
+      password: 
+       from_secret: pubGithub_password
+      repo: github.com/operator259/ML-Prediction/tree/master
+      registry: github.com
+      tags:
+        - latest
+      platform:
+        - linux/amd64
