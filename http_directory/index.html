@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NRL Score Prediction</title>
+    <script src="http://cdn.jsdelivr.net/npm/onnxruntime-web@1.18.0/dist/ort.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+            text-align: center;
+        }
+        h1 {
+            color: #0056b3;
+        }
+        form {
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            display: inline-block;
+            padding: 20px;
+            margin: 20px auto;
+            text-align: left;
+            max-width: 400px;
+            width: 100%;
+        }
+        label {
+            display: block;
+            margin: 10px 0 5px;
+        }
+        select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+            margin-bottom: 15px;
+        }
+        input[type="submit"] {
+            background-color: #0056b3;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            font-size: 16px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        input[type="submit"]:hover {
+            background-color: #004494;
+        }
+        #results {
+            margin-top: 20px;
+        }
+        #results p {
+            font-size: 18px;
+            font-weight: bold;
+            margin: 5px 0;
+        }
+        #winner {
+            color: red;
+            font-weight: bold;
+        }
+        #fileAges {
+            margin: 20px 0;
+            font-size: 16px;
+        }
+        #strengthCanvas, #fancyChartCanvas {
+            margin-top: 20px;
+            width: 400px;
+            height: 400px;
+        }
+    </style>
+</head>
+<body>
+    <h1>NRL Score Prediction Round 4 Updated 29/3/2025</h1>
+    <form id="predictionForm">
+        <label for="homeTeam">Home Team:</label>
+        <select id="homeTeam" name="homeTeam" required></select>
+
+        <label for="awayTeam">Away Team:</label>
+        <select id="awayTeam" name="awayTeam" required></select>
+
+        <label for="venue">Venue:</label>
+        <select id="venue" name="venue" required></select>
+
+        <input type="submit" value="Predict Scores">
+    </form>
+
+    <div id="results">
+        <p id="homeScore">Home Team Score: </p>
+        <p id="awayScore">Away Team Score: </p>
+        <p id="winner">Winner: </p>
+    </div>
+
+    <div id="fileAges">
+        <p id="modelHomeAge">Model Home (model_home_mod.onnx) Date: </p>
+        <p id="modelAwayAge">Model Away (model_away_mod.onnx) Date: </p>
+        <p id="scalerAge">Scaler (scaler.json) Date: </p>
+    </div>
+
+    <canvas id="strengthCanvas"></canvas>
+    <canvas id="fancyChartCanvas"></canvas>
+
+    <script>
+        const categories = [
+            ["Brisbane Broncos", "Canberra Raiders", "Canterbury Bulldogs", "Canterbury-Bankstown Bulldogs", "Cronulla Sharks", "Cronulla-Sutherland Sharks", "Dolphins", "Gold Coast Titans", "Manly Sea Eagles", "Manly-Warringah Sea Eagles", "Melbourne Storm", "New Zealand Warriors", "Newcastle Knights", "North QLD Cowboys", "North Queensland Cowboys", "Parramatta Eels", "Penrith Panthers", "South Sydney Rabbitohs", "St George Dragons", "St. George Illawarra Dragons", "Sydney Roosters", "Wests Tigers"],
+            ["Brisbane Broncos", "Canberra Raiders", "Canterbury Bulldogs", "Canterbury-Bankstown Bulldogs", "Cronulla Sharks", "Cronulla-Sutherland Sharks", "Dolphins", "Gold Coast Titans", "Manly Sea Eagles", "Manly-Warringah Sea Eagles", "Melbourne Storm", "New Zealand Warriors", "Newcastle Knights", "North QLD Cowboys", "North Queensland Cowboys", "Parramatta Eels", "Penrith Panthers", "South Sydney Rabbitohs", "St George Dragons", "St. George Illawarra Dragons", "Sydney Roosters", "Wests Tigers"],
+            ["4 Pines Park (Brookvale Oval)", "AAMI Park", "Accor Stadium", "Allegiant Stadium", "Allianz Stadium", "Apex Oval", "Apollo Projects Stadium", "BB Print Stadium", "Barlow Park", "Belmore Sports Ground", "BlueBet Stadium", "Browne Park", "C.ex Coffs International Stadium", "Campbelltown Stadium", "Carrington Park", "Cbus Super Stadium", "Central Coast Stadium", "Clive Berghofer Stadium", "CommBank Stadium", "FMG Stadium", "GIO Stadium", "Glen Willow Regional Sports Stadium", "Go Media Stadium", "HBF Park", "Industree Group Stadium", "Kayo Stadium", "Leichhardt Oval", "Marvel Stadium", "McDonald Jones Stadium", "McDonalds Park", "McLean Park", "Moreton Daily Stadium", "Netstrata Jubilee Stadium", "Optus Stadium", "Pointsbet Stadium", "QCB Stadium", "SCG", "Salter Oval", "Scully Park", "Sky Stadium", "Suncorp Stadium", "Sunshine Coast Stadium", "TIO Stadium", "The Gabba", "WIN Stadium"]
+        ];
+
+        function populateDropdowns() {
+            const homeTeamSelect = document.getElementById('homeTeam');
+            const awayTeamSelect = document.getElementById('awayTeam');
+            const venueSelect = document.getElementById('venue');
+
+            categories[0].forEach(team => {
+                const optionHome = document.createElement('option');
+                optionHome.value = team;
+                optionHome.text = team;
+                homeTeamSelect.appendChild(optionHome);
+            });
+
+            categories[1].forEach(team => {
+                const optionAway = document.createElement('option');
+                optionAway.value = team;
+                optionAway.text = team;
+                awayTeamSelect.appendChild(optionAway);
+            });
+
+            categories[2].forEach(venue => {
+                if (venue && venue.trim() !== 'NaN') {
+                    const optionVenue = document.createElement('option');
+                    optionVenue.value = venue;
+                    optionVenue.text = venue;
+                    venueSelect.appendChild(optionVenue);
+                }
+            });
+        }
+
+        async function loadModel(modelUrl) {
+            try {
+                const session = await ort.InferenceSession.create(modelUrl);
+                return session;
+            } catch (error) {
+                console.error('Error loading ONNX model:', error);
+                return null;
+            }
+        }
+
+        async function loadJson(url) {
+            try {
+                const response = await fetch(url);
+                if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+                return response.json();
+            } catch (error) {
+                console.error('Error loading JSON file:', error);
+                return null;
+            }
+        }
+
+        async function predict() {
+            const modelHome = await loadModel('http://localhost:8000/model_home.onnx');
+            const modelAway = await loadModel('http://localhost:8000/model_away.onnx');
+            const scaler = await loadJson('http://localhost:8000/scaler.json');
+
+            if (!modelHome || !modelAway || !scaler) {
+                console.error('Error loading models or JSON files.');
+                return;
+            }
+	    if (!scaler || !scaler.mean_ || !scaler.scale_) {
+        	console.error("Scaler data is missing or malformed!");
+        	return;
+    	    }
+
+    	    console.log("Scaler data loaded successfully.");
+    
+    	   // Check lengths
+           if (scaler.mean_.length !== scaler.scale_.length) {
+           	console.error("Mismatch between mean_ and scale_ array lengths.");
+        	return;
+           }
+
+
+            const homeTeam = document.getElementById('homeTeam').value;
+            const awayTeam = document.getElementById('awayTeam').value;
+            const venue = document.getElementById('venue').value;
+
+            const input = [homeTeam, awayTeam, venue];
+            const encodedInput = encodeData(input);
+            
+            const expectedLength = 90; 
+            const scaledInput = scaleData(encodedInput, scaler);
+            const inputTensor = new ort.Tensor('float32', new Float32Array(scaledInput), [1, expectedLength]);
+            
+            try {
+                const resultsHome = await modelHome.run({ 'float_input': inputTensor });
+                const resultsAway = await modelAway.run({ 'float_input': inputTensor });
+
+                const homeOutput = resultsHome[modelHome.outputNames[0]];
+                const awayOutput = resultsAway[modelAway.outputNames[0]];
+
+                if (homeOutput && awayOutput) {
+                    const homeScore = homeOutput.data[0];
+                    const awayScore = awayOutput.data[0];
+                    const winner = homeScore > awayScore ? homeTeam : awayTeam;
+
+                    document.getElementById('homeScore').innerText = `Home Team (${homeTeam}) Score: ${homeScore}`;
+                    document.getElementById('awayScore').innerText = `Away Team (${awayTeam}) Score: ${awayScore}`;
+                    document.getElementById('winner').innerText = `Winner: ${winner}`;
+                    
+                    console.log(`Home Team (${homeTeam}) Score: ${homeScore}`);
+                    console.log(`Away Team (${awayTeam}) Score: ${awayScore}`);
+                } else {
+                    console.error('Invalid output from the model.');
+                }
+            } catch (error) {
+                console.error('Error running prediction:', error);
+            }
+        }
+
+        function encodeData(data) {
+            const totalLength = 90;
+            const encoded = new Array(totalLength).fill(0);
+
+            const homeTeamIdx = categories[0].indexOf(data[0]);
+            const awayTeamIdx = categories[1].indexOf(data[1]);
+            const venueIdx = categories[2].indexOf(data[2]);
+
+            if (homeTeamIdx !== -1) encoded[homeTeamIdx] = 1;
+            if (awayTeamIdx !== -1) encoded[categories[0].length + awayTeamIdx] = 1;
+            if (venueIdx !== -1) encoded[categories[0].length * 2 + venueIdx] = 1;
+
+            console.log('Encoded data:', encoded);
+
+            return encoded;
+        }
+
+        function scaleData(data, scaler) {
+            const mean = scaler.mean_;
+            const scale = scaler.scale_;
+            console.log('scaler :', scaler );
+            console.log('mean :', mean );
+            console.log('scale :', scale );
+            const scaled = data.map((value, index) => (value - mean[index]) / scale[index]);
+
+            console.log('Scaled data:', scaled);
+
+            return scaled;
+        }
+
+        function updateFileAges() {
+            fetch('model_home_mod.onnx')
+                .then(response => response.headers.get('last-modified'))
+                .then(date => document.getElementById('modelHomeAge').innerText = `Model Home Date: ${date}`);
+
+            fetch('model_away_mod.onnx')
+                .then(response => response.headers.get('last-modified'))
+                .then(date => document.getElementById('modelAwayAge').innerText = `Model Away Date: ${date}`);
+
+            fetch('scaler.json')
+                .then(response => response.headers.get('last-modified'))
+                .then(date => document.getElementById('scalerAge').innerText = `Scaler Date: ${date}`);
+        }
+
+        function displayPieChart() {
+            const ctx = document.getElementById('strengthCanvas').getContext('2d');
+            const data = {
+                labels: ['Home Team Model', 'Away Team Model', 'Scaler Model'],
+                datasets: [{
+                    data: [85, 90, 80],
+                    backgroundColor: ['#ff6384', '#36a2eb', '#cc65fe'],
+                    borderColor: '#fff',
+                    borderWidth: 2
+                }]
+            };
+
+            new Chart(ctx, {
+                type: 'pie',
+                data: data,
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(tooltipItem) {
+                                    return tooltipItem.label + ': ' + tooltipItem.raw + '%';
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function displayFancyDiagram() {
+            const ctx = document.getElementById('fancyChartCanvas').getContext('2d');
+            const data = {
+                labels: ['Category A', 'Category B', 'Category C', 'Category D'],
+                datasets: [{
+                    data: [30, 50, 15, 5],
+                    backgroundColor: ['#ff9999', '#66b3ff', '#99ff99', '#ffcc99']
+                }]
+            };
+
+            new Chart(ctx, {
+                type: 'bar',
+                data: data,
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            display: true,
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(tooltipItem) {
+                                    return tooltipItem.label + ': ' + tooltipItem.raw;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        document.getElementById('predictionForm').addEventListener('submit', function(event) {
+            event.preventDefault();
+            predict();
+        });
+
+        document.addEventListener('DOMContentLoaded', function() {
+            populateDropdowns();
+            updateFileAges();
+            displayPieChart();
+            displayFancyDiagram();
+        });
+    </script>
+</body>
+</html>
